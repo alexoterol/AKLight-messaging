@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  broker1:
+    build: ./broker
+    container_name: aklight_broker1
+    command: ["./broker", "1"]
+    ports:
+      - "7000:7000"
+    volumes:
+      - broker1_data:/app/data
+    networks:
+      - aklight_network
+    restart: unless-stopped
+
+  broker2:
+    build: ./broker
+    container_name: aklight_broker2
+    command: ["./broker", "2"]
+    ports:
+      - "7001:7001"
+    volumes:
+      - broker2_data:/app/data
+    networks:
+      - aklight_network
+    restart: unless-stopped
+
+  producer1:
+    build: ./producer
+    container_name: aklight_producer1
+    command: ["./producer", "producer1", "metrics/docker"]
+    depends_on:
+      - broker1
+      - broker2
+    networks:
+      - aklight_network
+    restart: unless-stopped
+    environment:
+      - BROKER_HOST=broker1
+      - BROKER_PORT=7000
+
+  producer2:
+    build: ./producer
+    container_name: aklight_producer2
+    command: ["./producer", "producer2", "metrics/docker"]
+    depends_on:
+      - broker1
+      - broker2
+    networks:
+      - aklight_network
+    restart: unless-stopped
+    environment:
+      - BROKER_HOST=broker1
+      - BROKER_PORT=7000
+
+  consumer1:
+    build: ./consumer
+    container_name: aklight_consumer1
+    command: ["./consumer", "consumer1", "1"]
+    depends_on:
+      - broker1
+      - broker2
+    networks:
+      - aklight_network
+    restart: unless-stopped
+    environment:
+      - BROKER_HOST=broker1
+      - BROKER_PORT=7000
+
+volumes:
+  broker1_data:
+  broker2_data:
+
+networks:
+  aklight_network:
+    driver: bridge
