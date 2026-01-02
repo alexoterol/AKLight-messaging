@@ -1,11 +1,9 @@
-FROM alpine:latest
-
-RUN apk add --no-cache gcc musl-dev
+FROM gcc:latest
 
 WORKDIR /app
 
 COPY producer.c .
 
-RUN gcc -o producer producer.c -pthread -Wall -Wextra
+RUN gcc -o producer producer.c -pthread -O2
 
-CMD ["./producer", "producer1", "metrics/docker"]
+CMD ["./producer", "producer1", "metrics/docker", "broker1", "7000"]

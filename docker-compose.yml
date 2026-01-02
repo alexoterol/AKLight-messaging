@@ -1,6 +1,5 @@
-version: '3.8'
-
 services:
+  # Brokers
   broker1:
     build: ./broker
     container_name: aklight_broker1
@@ -25,47 +24,72 @@ services:
       - aklight_network
     restart: unless-stopped
 
+  # Producers
   producer1:
     build: ./producer
     container_name: aklight_producer1
-    command: ["./producer", "producer1", "metrics/docker"]
+    command: ["./producer", "producer1", "metrics/docker", "broker1", "7000"]
     depends_on:
       - broker1
-      - broker2
     networks:
       - aklight_network
     restart: unless-stopped
-    environment:
-      - BROKER_HOST=broker1
-      - BROKER_PORT=7000
 
   producer2:
     build: ./producer
     container_name: aklight_producer2
-    command: ["./producer", "producer2", "metrics/docker"]
+    command: ["./producer", "producer2", "metrics/docker", "broker2", "7001"]
     depends_on:
-      - broker1
       - broker2
     networks:
       - aklight_network
     restart: unless-stopped
-    environment:
-      - BROKER_HOST=broker1
-      - BROKER_PORT=7000
 
+  # Consumers conectados a broker1 (reciben de producer1)
   consumer1:
     build: ./consumer
     container_name: aklight_consumer1
-    command: ["./consumer", "consumer1", "1"]
+    command: ["./consumer", "consumer1", "1", "broker1", "7000", "metrics/docker/producer1/cpu"]
     depends_on:
       - broker1
-      - broker2
+      - producer1
     networks:
       - aklight_network
     restart: unless-stopped
-    environment:
-      - BROKER_HOST=broker1
-      - BROKER_PORT=7000
+
+  consumer2:
+    build: ./consumer
+    container_name: aklight_consumer2
+    command: ["./consumer", "consumer2", "1", "broker1", "7000", "metrics/docker/producer1/#"]
+    depends_on:
+      - broker1
+      - producer1
+    networks:
+      - aklight_network
+    restart: unless-stopped
+
+  # Consumers conectados a broker2 (reciben de producer2)
+  consumer3:
+    build: ./consumer
+    container_name: aklight_consumer3
+    command: ["./consumer", "consumer3", "0", "broker2", "7001", "metrics/docker/producer2/cpu"]
+    depends_on:
+      - broker2
+      - producer2
+    networks:
+      - aklight_network
+    restart: unless-stopped
+
+  consumer4:
+    build: ./consumer
+    container_name: aklight_consumer4
+    command: ["./consumer", "consumer4", "1", "broker2", "7001", "metrics/docker/producer2/#"]
+    depends_on:
+      - broker2
+      - producer2
+    networks:
+      - aklight_network
+    restart: unless-stopped
 
 volumes:
   broker1_data:
