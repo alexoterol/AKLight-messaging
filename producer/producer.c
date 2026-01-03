@@ -37,7 +37,7 @@ static double get_cpu(void) {
     
     FILE *f = fopen("/sys/fs/cgroup/cpu/cpuacct.usage", "r");
     if (!f) f = fopen("/sys/fs/cgroup/cpu.stat", "r");
-    if (!f) return (rand() % 100) / 10.0;  // Fallback: valores aleatorios
+    if (!f) return (rand() % 100) / 10.0;
     
     long usage;
     fscanf(f, "%ld", &usage);
@@ -60,7 +60,7 @@ static double get_cpu(void) {
 static long get_memory(void) {
     FILE *f = fopen("/sys/fs/cgroup/memory/memory.usage_in_bytes", "r");
     if (!f) f = fopen("/sys/fs/cgroup/memory.current", "r");
-    if (!f) return (rand() % 500) + 100;  // Fallback
+    if (!f) return (rand() % 500) + 100;
     
     long usage;
     fscanf(f, "%ld", &usage);
@@ -98,16 +98,24 @@ static void get_network(long *rx, long *tx) {
 static void collect_metrics(metrics_t *m) {
     m->cpu = get_cpu();
     m->mem_mb = get_memory();
-    m->disk_mb = rand() % 1000;  // Simplificado
+    m->disk_mb = rand() % 1000;
     get_network(&m->net_rx, &m->net_tx);
 }
 
 static int connect_to_broker(void) {
     struct hostent *host = gethostbyname(broker_host);
-    if (!host) return -1;
+    if (!host) {
+        printf("[%s] ERROR: Cannot resolve %s\n", producer_id, broker_host);
+        fflush(stdout);
+        return -1;
+    }
     
     broker_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (broker_socket < 0) return -1;
+    if (broker_socket < 0) {
+        printf("[%s] ERROR: Cannot create socket\n", producer_id);
+        fflush(stdout);
+        return -1;
+    }
     
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -116,12 +124,15 @@ static int connect_to_broker(void) {
     addr.sin_port = htons(broker_port);
     
     if (connect(broker_socket, (struct sockaddr*)&addr, sizeof(addr)) != 0) {
+        printf("[%s] ERROR: Cannot connect to %s:%d\n", producer_id, broker_host, broker_port);
+        fflush(stdout);
         close(broker_socket);
         broker_socket = -1;
         return -1;
     }
     
     printf("[%s] Connected to %s:%d\n", producer_id, broker_host, broker_port);
+    fflush(stdout);
     
     char reg[256];
     snprintf(reg, sizeof(reg), "REGISTER_PRODUCER|%s\n", producer_id);
@@ -166,6 +177,7 @@ static void publish_metrics(const metrics_t *m) {
     
     printf("[%s] CPU:%.1f%% MEM:%ldMB NET:rx=%ld,tx=%ld\n", 
            producer_id, m->cpu, m->mem_mb, m->net_rx, m->net_tx);
+    fflush(stdout);
 }
 
 static void signal_handler(int sig) {
@@ -173,7 +185,6 @@ static void signal_handler(int sig) {
 }
 
 int main(int argc, char *argv[]) {
-    // Argumentos: producer_id base_topic broker_host broker_port
     if (argc >= 2) strncpy(producer_id, argv[1], 63);
     if (argc >= 3) strncpy(base_topic, argv[2], 255);
     if (argc >= 4) strncpy(broker_host, argv[3], 127);
@@ -182,12 +193,14 @@ int main(int argc, char *argv[]) {
     printf("\n=== AKLight Producer: %s ===\n", producer_id);
     printf("Broker: %s:%d\n", broker_host, broker_port);
     printf("Topic: %s/%s/*\n\n", base_topic, producer_id);
+    fflush(stdout);
     
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
     
     if (connect_to_broker() != 0) {
         printf("Initial connection failed, will retry\n");
+        fflush(stdout);
     }
     
     metrics_t metrics;

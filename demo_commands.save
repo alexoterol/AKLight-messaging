@@ -1,0 +1,17 @@
+sudo usermod -aG docker $USER : Sudo Mode
+docker-compose build : Construir imagenes
+docker-compose up -d  : iniciar sistema completo
+docker-compose logs -f (contenedor especifico) : Ver logs de contenedores
+docker logs aklight_producer1 | tail -20  : verificar si producer envia metricas
+docker logs aklight_broker1 | grep "Mensaje almacenado" : Verifica si brocker recibe metricas
+docker logs aklight_consumer1 | tail -30 : Verifica si consumer recibe mensajes
+docker top aklight_broker1 : Ver procesos de un contenedor
+docker exec -it aklight_broker1 sh : Entra a shell de un contenedor
+	aklight_broker1 ls -la /app/data : Comando en contenedor
+	aklight_broker1 cat /app/data/broker1/metrics_docker_producer1_cpu_p0.log : Ver persistencia de archivos
+docker exec -it aklight_consumer1 /bin/sh : Entra a shell de Consumer1
+	
+
+docker network ls
+docker network inspect aklight_aklight_network
+docker exec aklight_producer1 ping -c 3 broker1sudo usermod -aG docker $USER^C 

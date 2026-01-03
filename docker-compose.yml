@@ -1,9 +1,8 @@
 services:
-  # Brokers
+  # ==================== BROKERS ====================
   broker1:
     build: ./broker
     container_name: aklight_broker1
-    command: ["./broker", "1"]
     ports:
       - "7000:7000"
     volumes:
@@ -15,7 +14,7 @@ services:
   broker2:
     build: ./broker
     container_name: aklight_broker2
-    command: ["./broker", "2"]
+    command: ["sh", "-c", "echo '=== BROKER STARTING ===' && echo 'ID: 2' && echo 'Port: 7001' && stdbuf -oL -eL ./broker 2 2>&1"]
     ports:
       - "7001:7001"
     volumes:
@@ -24,32 +23,35 @@ services:
       - aklight_network
     restart: unless-stopped
 
-  # Producers
+  # ==================== PRODUCERS ====================
+  # Producer1 -> Broker1 (7000)
   producer1:
     build: ./producer
     container_name: aklight_producer1
-    command: ["./producer", "producer1", "metrics/docker", "broker1", "7000"]
+    command: ["sh", "-c", "echo '=== PRODUCER STARTING ===' && sleep 3 && echo 'Connecting to broker1:7000...' && stdbuf -oL -eL ./producer producer1 metrics/docker broker1 7000 2>&1"]
     depends_on:
       - broker1
     networks:
       - aklight_network
     restart: unless-stopped
 
+  # Producer2 -> Broker2 (7001)
   producer2:
     build: ./producer
     container_name: aklight_producer2
-    command: ["./producer", "producer2", "metrics/docker", "broker2", "7001"]
+    command: ["sh", "-c", "echo '=== PRODUCER STARTING ===' && sleep 3 && echo 'Connecting to broker2:7001...' && stdbuf -oL -eL ./producer producer2 metrics/docker broker2 7001 2>&1"]
     depends_on:
       - broker2
     networks:
       - aklight_network
     restart: unless-stopped
 
-  # Consumers conectados a broker1 (reciben de producer1)
+  # ==================== CONSUMERS ====================
+  # Consumer1 -> Broker1: Solo CPU de producer1
   consumer1:
     build: ./consumer
     container_name: aklight_consumer1
-    command: ["./consumer", "consumer1", "1", "broker1", "7000", "metrics/docker/producer1/cpu"]
+    command: ["sh", "-c", "echo '=== CONSUMER STARTING ===' && sleep 5 && echo 'Connecting to broker1:7000...' && stdbuf -oL -eL ./consumer consumer1 1 broker1 7000 'metrics/docker/producer1/cpu' 2>&1"]
     depends_on:
       - broker1
       - producer1
@@ -57,10 +59,11 @@ services:
       - aklight_network
     restart: unless-stopped
 
+  # Consumer2 -> Broker1: Todo de producer1 (wildcard)
   consumer2:
     build: ./consumer
     container_name: aklight_consumer2
-    command: ["./consumer", "consumer2", "1", "broker1", "7000", "metrics/docker/producer1/#"]
+    command: ["sh", "-c", "echo '=== CONSUMER STARTING ===' && sleep 5 && echo 'Connecting to broker1:7000...' && stdbuf -oL -eL ./consumer consumer2 1 broker1 7000 'metrics/docker/producer1/#' 2>&1"]
     depends_on:
       - broker1
       - producer1
@@ -68,11 +71,11 @@ services:
       - aklight_network
     restart: unless-stopped
 
-  # Consumers conectados a broker2 (reciben de producer2)
+  # Consumer3 -> Broker2: Solo CPU de producer2
   consumer3:
     build: ./consumer
     container_name: aklight_consumer3
-    command: ["./consumer", "consumer3", "0", "broker2", "7001", "metrics/docker/producer2/cpu"]
+    command: ["sh", "-c", "echo '=== CONSUMER STARTING ===' && sleep 5 && echo 'Connecting to broker2:7001...' && stdbuf -oL -eL ./consumer consumer3 0 broker2 7001 'metrics/docker/producer2/cpu' 2>&1"]
     depends_on:
       - broker2
       - producer2
@@ -80,10 +83,11 @@ services:
       - aklight_network
     restart: unless-stopped
 
+  # Consumer4 -> Broker2: Todo de producer2 (wildcard)
   consumer4:
     build: ./consumer
     container_name: aklight_consumer4
-    command: ["./consumer", "consumer4", "1", "broker2", "7001", "metrics/docker/producer2/#"]
+    command: ["sh", "-c", "echo '=== CONSUMER STARTING ===' && sleep 5 && echo 'Connecting to broker2:7001...' && stdbuf -oL -eL ./consumer consumer4 1 broker2 7001 'metrics/docker/producer2/#' 2>&1"]
     depends_on:
       - broker2
       - producer2
