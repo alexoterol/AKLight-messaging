@@ -1,104 +1,181 @@
+# =============================================================================
+# AKLight v2 - Docker Compose (CORREGIDO)
+# =============================================================================
+# 
+# Uso:
+#   docker-compose up --build              # Iniciar todo
+#   docker-compose logs -f                 # Ver todos los logs
+#   docker-compose logs -f consumer1       # Ver logs del consumer
+#   docker-compose logs -f producer1       # Ver logs del producer
+#   docker-compose down -v                 # Detener y limpiar
+#
+# =============================================================================
+
 services:
-  # ==================== BROKERS ====================
+  # ===========================================================================
+  # BROKER 1
+  # ===========================================================================
   broker1:
-    build: ./broker
+    build:
+      context: .
+      dockerfile: broker/Dockerfile
     container_name: aklight_broker1
+    hostname: broker1
+    environment:
+      - BROKER_ID=1
     ports:
       - "7000:7000"
     volumes:
       - broker1_data:/app/data
     networks:
-      - aklight_network
+      - aklight_net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "7000"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
 
+  # ===========================================================================
+  # BROKER 2
+  # ===========================================================================
   broker2:
-    build: ./broker
+    build:
+      context: .
+      dockerfile: broker/Dockerfile
     container_name: aklight_broker2
-    command: ["sh", "-c", "echo '=== BROKER STARTING ===' && echo 'ID: 2' && echo 'Port: 7001' && stdbuf -oL -eL ./broker 2 2>&1"]
+    hostname: broker2
+    environment:
+      - BROKER_ID=2
     ports:
       - "7001:7001"
     volumes:
       - broker2_data:/app/data
     networks:
-      - aklight_network
+      - aklight_net
     restart: unless-stopped
+    depends_on:
+      broker1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "7001"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
 
-  # ==================== PRODUCERS ====================
-  # Producer1 -> Broker1 (7000)
+  # ===========================================================================
+  # PRODUCER 1 -> conecta a BROKER 1
+  # ===========================================================================
   producer1:
-    build: ./producer
+    build:
+      context: .
+      dockerfile: producer/Dockerfile
     container_name: aklight_producer1
-    command: ["sh", "-c", "echo '=== PRODUCER STARTING ===' && sleep 3 && echo 'Connecting to broker1:7000...' && stdbuf -oL -eL ./producer producer1 metrics/docker broker1 7000 2>&1"]
-    depends_on:
-      - broker1
+    hostname: producer1
+    environment:
+      - PRODUCER_ID=producer1
+      - BASE_TOPIC=metrics/docker
+      - BROKER_HOST=broker1
+      - BROKER_PORT=7000
+      - INTERVAL=5
+      - USE_KEY=1
     networks:
-      - aklight_network
+      - aklight_net
+    depends_on:
+      broker1:
+        condition: service_healthy
     restart: unless-stopped
 
-  # Producer2 -> Broker2 (7001)
+  # ===========================================================================
+  # PRODUCER 2 -> conecta a BROKER 2
+  # ===========================================================================
   producer2:
-    build: ./producer
+    build:
+      context: .
+      dockerfile: producer/Dockerfile
     container_name: aklight_producer2
-    command: ["sh", "-c", "echo '=== PRODUCER STARTING ===' && sleep 3 && echo 'Connecting to broker2:7001...' && stdbuf -oL -eL ./producer producer2 metrics/docker broker2 7001 2>&1"]
-    depends_on:
-      - broker2
+    hostname: producer2
+    environment:
+      - PRODUCER_ID=producer2
+      - BASE_TOPIC=metrics/docker
+      - BROKER_HOST=broker2
+      - BROKER_PORT=7001
+      - INTERVAL=5
+      - USE_KEY=1
     networks:
-      - aklight_network
+      - aklight_net
+    depends_on:
+      broker2:
+        condition: service_healthy
     restart: unless-stopped
 
-  # ==================== CONSUMERS ====================
-  # Consumer1 -> Broker1: Solo CPU de producer1
+  # ===========================================================================
+  # CONSUMER 1 -> conecta a BROKER 1, recibe de ambos producers via wildcard
+  # ===========================================================================
   consumer1:
-    build: ./consumer
+    build:
+      context: .
+      dockerfile: consumer/Dockerfile
     container_name: aklight_consumer1
-    command: ["sh", "-c", "echo '=== CONSUMER STARTING ===' && sleep 5 && echo 'Connecting to broker1:7000...' && stdbuf -oL -eL ./consumer consumer1 1 broker1 7000 'metrics/docker/producer1/cpu' 2>&1"]
-    depends_on:
-      - broker1
-      - producer1
+    hostname: consumer1
+    environment:
+      - CONSUMER_ID=consumer1
+      - SESSION_PERSISTENT=1
+      - BROKER_HOST=broker1
+      - BROKER_PORT=7000
+      - TOPICS=metrics/docker/#
+      - CPU_THRESHOLD=80.0
+      - MEM_THRESHOLD=500
+      # Twilio (opcional - descomentar y configurar)
+
+    volumes:
+      - consumer1_offsets:/app/offsets
     networks:
-      - aklight_network
+      - aklight_net
+    depends_on:
+      broker1:
+        condition: service_healthy
+      producer1:
+        condition: service_started
     restart: unless-stopped
 
-  # Consumer2 -> Broker1: Todo de producer1 (wildcard)
-  consumer2:
-    build: ./consumer
-    container_name: aklight_consumer2
-    command: ["sh", "-c", "echo '=== CONSUMER STARTING ===' && sleep 5 && echo 'Connecting to broker1:7000...' && stdbuf -oL -eL ./consumer consumer2 1 broker1 7000 'metrics/docker/producer1/#' 2>&1"]
-    depends_on:
-      - broker1
-      - producer1
+  # ===========================================================================
+  # STRESS TEST (perfil opcional)
+  # ===========================================================================
+  stress1:
+    build:
+      context: .
+      dockerfile: stress/Dockerfile
+    container_name: aklight_stress1
+    hostname: stress1
+    environment:
+      - STRESS_MODE=both
+      - STRESS_DURATION=60
+      - STRESS_INTENSITY=200
     networks:
-      - aklight_network
-    restart: unless-stopped
+      - aklight_net
+    profiles:
+      - stress
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
 
-  # Consumer3 -> Broker2: Solo CPU de producer2
-  consumer3:
-    build: ./consumer
-    container_name: aklight_consumer3
-    command: ["sh", "-c", "echo '=== CONSUMER STARTING ===' && sleep 5 && echo 'Connecting to broker2:7001...' && stdbuf -oL -eL ./consumer consumer3 0 broker2 7001 'metrics/docker/producer2/cpu' 2>&1"]
-    depends_on:
-      - broker2
-      - producer2
-    networks:
-      - aklight_network
-    restart: unless-stopped
-
-  # Consumer4 -> Broker2: Todo de producer2 (wildcard)
-  consumer4:
-    build: ./consumer
-    container_name: aklight_consumer4
-    command: ["sh", "-c", "echo '=== CONSUMER STARTING ===' && sleep 5 && echo 'Connecting to broker2:7001...' && stdbuf -oL -eL ./consumer consumer4 1 broker2 7001 'metrics/docker/producer2/#' 2>&1"]
-    depends_on:
-      - broker2
-      - producer2
-    networks:
-      - aklight_network
-    restart: unless-stopped
-
+# =============================================================================
+# VOLUMES
+# =============================================================================
 volumes:
   broker1_data:
   broker2_data:
+  consumer1_offsets:
 
+# =============================================================================
+# NETWORKS
+# =============================================================================
 networks:
-  aklight_network:
+  aklight_net:
     driver: bridge
+

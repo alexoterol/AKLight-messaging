@@ -1,12 +1,26 @@
-FROM gcc:latest
+# AKLight v2 - Producer Dockerfile
+FROM alpine:3.19
+
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    linux-headers \
+    procps
 
 WORKDIR /app
 
-COPY producer.c .
+# Copiar código fuente
+COPY common/aklight_common.h ./common/
+COPY producer/producer.c ./
 
-RUN gcc -o producer producer.c -pthread -O2 -Wall && \
-    echo "Producer compiled successfully" && \
-    ls -lh producer
+# Compilar
+RUN gcc -O2 -Wall -Wextra -pthread -o producer producer.c -lm
 
-# Usar stdbuf para deshabilitar buffering
-CMD ["sh", "-c", "echo '=== PRODUCER STARTING ===' && sleep 3 && echo 'Connecting to broker1:7000...' && stdbuf -oL -eL ./producer producer1 metrics/docker broker1 7000 2>&1"]
+ENV PRODUCER_ID=producer1
+ENV BASE_TOPIC=metrics/docker
+ENV BROKER_HOST=broker1
+ENV BROKER_PORT=7000
+ENV INTERVAL=5
+ENV USE_KEY=1
+
+CMD ["./producer"]

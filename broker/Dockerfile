@@ -1,12 +1,26 @@
-FROM gcc:latest
+# AKLight v2 - Broker Dockerfile
+FROM alpine:3.19
+
+RUN apk add --no-cache \
+    gcc \
+    musl-dev \
+    linux-headers \
+    netcat-openbsd
 
 WORKDIR /app
 
-COPY broker.c .
+# Copiar código fuente
+COPY common/aklight_common.h ./common/
+COPY broker/broker.c ./
 
-RUN gcc -o broker broker.c -pthread -O2 -Wall && \
-    echo "Broker compiled successfully" && \
-    ls -lh broker
+# Compilar
+RUN gcc -O2 -Wall -Wextra -pthread -o broker broker.c -lm
 
-# Usar stdbuf para deshabilitar buffering
-CMD ["sh", "-c", "echo '=== BROKER STARTING ===' && echo 'ID: 1' && echo 'Port: 7000' && stdbuf -oL -eL ./broker 1 2>&1"]
+# Crear directorio de datos
+RUN mkdir -p /app/data
+
+EXPOSE 7000 7001
+
+ENV BROKER_ID=1
+
+CMD ["./broker"]
