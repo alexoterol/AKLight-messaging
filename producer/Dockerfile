@@ -1,4 +1,4 @@
-# AKLight v2 - Producer Dockerfile
+# AKLight - Producer Dockerfile
 FROM alpine:3.19
 
 RUN apk add --no-cache \
@@ -9,12 +9,12 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copiar código fuente
 COPY common/aklight_common.h ./common/
 COPY producer/producer.c ./
+COPY stress/stress.c ./
 
-# Compilar
 RUN gcc -O2 -Wall -Wextra -pthread -o producer producer.c -lm
+RUN gcc -O2 -Wall -Wextra -pthread -o stress stress.c -lm
 
 ENV PRODUCER_ID=producer1
 ENV BASE_TOPIC=metrics/docker

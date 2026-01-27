@@ -8,10 +8,8 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copiar código fuente
 COPY stress/stress.c ./
 
-# Compilar
 RUN gcc -O2 -Wall -Wextra -pthread -o stress stress.c -lm
 
 ENV STRESS_MODE=both

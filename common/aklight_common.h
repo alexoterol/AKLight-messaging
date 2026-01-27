@@ -1,7 +1,5 @@
 /**
- * ============================================================================
- * AKLight v2 - Header Común con TDAs y Definiciones
- * ============================================================================
+ * Header Común con TDAs y Definiciones
  * 
  * Tipos de Datos Abstractos implementados:
  * 1. MESSAGE_QUEUE   - Cola de mensajes (lista enlazada + mutex + condvar)
@@ -14,8 +12,7 @@
  * - pthread_rwlock_t   : Read-Write locks (múltiples lectores, un escritor)
  * - sem_t              : Semáforos para control de recursos
  * - pthread_cond_t     : Variables de condición para productor-consumidor
- * ============================================================================
- */
+*/
 
 #ifndef AKLIGHT_COMMON_H
 #define AKLIGHT_COMMON_H
@@ -34,9 +31,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-/* ============================================================================
- * CONSTANTES DE CONFIGURACIÓN
- * ============================================================================ */
+/*  CONSTANTES DE CONFIGURACIÓN  */
 
 #define AKLIGHT_VERSION         "2.0.0"
 #define MAX_TOPIC_LENGTH        256
@@ -61,13 +56,9 @@
 #define MSG_DELIMITER           '|'
 #define MSG_TERMINATOR          '\n'
 
-/* ============================================================================
- * ESTRUCTURAS DE MENSAJES
- * ============================================================================ */
+/*  ESTRUCTURAS DE MENSAJES */
 
-/**
- * Estructura de un mensaje en el sistema
- */
+/*  Estructura de un mensaje en el sistema  */
 typedef struct {
     char topic[MAX_TOPIC_LENGTH];
     char key[MAX_KEY_LENGTH];
@@ -77,9 +68,7 @@ typedef struct {
     int partition_id;
 } aklight_message_t;
 
-/**
- * Tipos de cliente
- */
+/*  Tipos de cliente    */
 typedef enum {
     CLIENT_TYPE_UNKNOWN = 0,
     CLIENT_TYPE_PRODUCER = 1,
@@ -87,11 +76,10 @@ typedef enum {
     CLIENT_TYPE_BROKER = 3
 } client_type_t;
 
-/* ============================================================================
- * TDA 1: COLA DE MENSAJES (Message Queue)
+/* TDA 1: COLA DE MENSAJES (Message Queue)
  * Implementación: Lista enlazada + mutex + condvar
  * Complejidad: O(1) para enqueue y dequeue
- * ============================================================================ */
+*/
 
 typedef struct msg_queue_node {
     aklight_message_t message;
@@ -198,11 +186,10 @@ static inline int mq_try_dequeue(message_queue_t *q, aklight_message_t *msg) {
     return 0;
 }
 
-/* ============================================================================
- * TDA 2: TABLA HASH DE PARTICIONES
+/* TDA 2: TABLA HASH DE PARTICIONES
  * Implementación: Hash table con chaining + RW-lock
  * Complejidad: O(1) promedio
- * ============================================================================ */
+*/
 
 typedef struct partition {
     int id;
@@ -277,11 +264,10 @@ static inline int pt_calculate_partition(partition_table_t *pt,
     }
 }
 
-/* ============================================================================
- * TDA 3: RING BUFFER
+/* TDA 3: RING BUFFER
  * Implementación: Array circular
  * Complejidad: O(1) para push
- * ============================================================================ */
+*/
 
 typedef struct {
     time_t timestamp;
@@ -311,10 +297,9 @@ static inline void rb_push(ring_buffer_t *rb, const char *data) {
     pthread_mutex_unlock(&rb->mutex);
 }
 
-/* ============================================================================
- * TDA 4: WILDCARD MATCHING PARA TÓPICOS N-NIVELES
+/* TDA 4: WILDCARD MATCHING PARA TÓPICOS N-NIVELES
  * Soporta: # (multi-nivel) y + (un nivel)
- * ============================================================================ */
+*/
 
 static inline int wildcard_match(const char *pattern, const char *topic) {
     char p_copy[MAX_TOPIC_LENGTH];
@@ -355,9 +340,7 @@ static inline int count_topic_levels(const char *topic) {
     return levels;
 }
 
-/* ============================================================================
- * UTILIDADES
- * ============================================================================ */
+/*  UTILIDADES   */
 
 static inline int parse_message(char *line, char **parts, int max_parts) {
     int count = 0;
@@ -382,9 +365,7 @@ static inline int parse_message(char *line, char **parts, int max_parts) {
     return count;
 }
 
-/* ============================================================================
- * LOGGING
- * ============================================================================ */
+/*  LOGGING */
 
 #define LOG_DEBUG   0
 #define LOG_INFO    1

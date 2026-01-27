@@ -1,0 +1,26 @@
+docker-compose up --build -d
+
+docker-compose logs -f
+
+/////// Test 1: Flujo Básico
+docker-compose logs -f consumer1
+docker-compose logs -f broker1 broker2
+/////// Test 2: Topics N-Niveles
+docker-compose exec consumer1 cat /app/offsets/consumer1.offsets
+/////// Test 3: Wildcard #
+// Visualizar consumer1 y las metricas recibidas
+/////// Test 4: Sesión Persistente
+docker-compose restart consumer1
+docker-compose logs -f consumer1
+/////// Test 5: Particionamiento
+docker-compose exec broker1 ls -la /app/data/
+/////// Test 6: Fork (3 Procesos)
+docker-compose exec producer1 ps aux
+/////// Test 7: Reconexión
+docker-compose restart broker1
+docker-compose logs -f producer1
+/////// Test 8: Thresholds, Stress Test y Whatsapp message
+// Revisar docker-compose.yml para Thresholds
+// buscar en docker-compose exec producer1 el ./stress
+// Verificar los mensajes en Whatsapp en Twillio
+

@@ -1,6 +1,4 @@
-// =============================================================================
-// AKLight v2 - Producer con Fork para Recolección de Métricas (CORREGIDO)
-// =============================================================================
+// AKLight - Producer con Fork para Recolección de Métricas
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,9 +15,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-// =============================================================================
 // CONSTANTES Y ESTRUCTURAS
-// =============================================================================
 
 #define MAX_BUFFER 4096
 #define MAX_TOPIC 256
@@ -33,7 +29,6 @@ typedef struct {
     long timestamp;
 } Metric;
 
-// Variables globales
 static volatile sig_atomic_t running = 1;
 static int broker_socket = -1;
 static char producer_id[64] = "producer1";
@@ -49,9 +44,7 @@ static int mem_pipe[2];
 static pid_t cpu_collector_pid = -1;
 static pid_t mem_collector_pid = -1;
 
-// =============================================================================
 // SIGNAL HANDLERS
-// =============================================================================
 
 void signal_handler(int sig) {
     (void)sig;
@@ -74,9 +67,7 @@ void setup_signals(void) {
     signal(SIGCHLD, SIG_IGN);
 }
 
-// =============================================================================
-// RECOLECCIÓN DE MÉTRICAS (Compatible con Arch Linux / cgroups v2)
-// =============================================================================
+// RECOLECCIÓN DE MÉTRICAS
 
 double get_cpu_usage(void) {
     static long prev_usage = 0;
@@ -84,7 +75,6 @@ double get_cpu_usage(void) {
     double cpu_percent = 0.0;
     FILE *fp;
     
-    // Arch Linux usa cgroups v2 - rutas posibles
     const char *paths[] = {
         "/sys/fs/cgroup/cpu.stat",
         "/sys/fs/cgroup/system.slice/cpu.stat",
@@ -122,8 +112,6 @@ double get_cpu_usage(void) {
             }
         }
     }
-    
-    // Fallback: /proc/stat (funciona en cualquier Linux)
     fp = fopen("/proc/stat", "r");
     if (fp) {
         static long prev_idle = 0, prev_total = 0;
@@ -173,7 +161,6 @@ long get_memory_usage_mb(void) {
         }
     }
     
-    // Fallback: /proc/meminfo
     fp = fopen("/proc/meminfo", "r");
     if (fp) {
         char line[256];
@@ -231,9 +218,7 @@ void get_network_stats(long *rx_bytes, long *tx_bytes) {
     }
 }
 
-// =============================================================================
 // PROCESOS HIJOS PARA RECOLECCIÓN DE MÉTRICAS (FORK)
-// =============================================================================
 
 void cpu_collector_process(int write_fd) {
     // Re-configurar señales para el hijo
@@ -241,7 +226,6 @@ void cpu_collector_process(int write_fd) {
     signal(SIGTERM, child_signal_handler);
     signal(SIGPIPE, SIG_IGN);
     
-    // Cerrar extremos que no usamos
     close(cpu_pipe[0]);
     close(mem_pipe[0]);
     close(mem_pipe[1]);
@@ -254,7 +238,6 @@ void cpu_collector_process(int write_fd) {
     strncpy(metric.type, "cpu", sizeof(metric.type) - 1);
     strncpy(metric.unit, "percent", sizeof(metric.unit) - 1);
     
-    // Primera lectura para inicializar deltas
     get_cpu_usage();
     sleep(1);
     
@@ -313,10 +296,7 @@ void mem_collector_process(int write_fd) {
     _exit(0);
 }
 
-// =============================================================================
 // CONEXIÓN AL BROKER
-// =============================================================================
-
 int connect_to_broker(void) {
     struct hostent *he;
     struct sockaddr_in server_addr;
@@ -336,7 +316,6 @@ int connect_to_broker(void) {
         return -1;
     }
     
-    // Configurar timeout de conexión
     struct timeval tv;
     tv.tv_sec = 5;
     tv.tv_usec = 0;
@@ -366,7 +345,6 @@ int connect_to_broker(void) {
         return -1;
     }
     
-    // Leer respuesta OK
     char response[MAX_BUFFER];
     ssize_t n = recv(sock, response, sizeof(response) - 1, 0);
     if (n > 0) {
@@ -375,7 +353,6 @@ int connect_to_broker(void) {
         fflush(stdout);
     }
     
-    // Quitar timeout para operación normal
     tv.tv_sec = 0;
     tv.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
@@ -383,9 +360,7 @@ int connect_to_broker(void) {
     return sock;
 }
 
-// =============================================================================
 // ENVÍO DE MÉTRICAS (sin esperar ACK bloqueante)
-// =============================================================================
 
 int send_metric(int sock, const char *metric_type, double value, const char *unit) {
     char topic[MAX_TOPIC];
@@ -424,20 +399,16 @@ int send_metric(int sock, const char *metric_type, double value, const char *uni
             fflush(stdout);
         }
     }
-    // No bloquear si no hay ACK inmediato
     
     return 0;
 }
 
-// =============================================================================
 // PROCESO PADRE - BUCLE PRINCIPAL
-// =============================================================================
 
 void parent_main_loop(void) {
     close(cpu_pipe[1]);
     close(mem_pipe[1]);
     
-    // Configurar pipes como no bloqueantes
     fcntl(cpu_pipe[0], F_SETFL, O_NONBLOCK);
     fcntl(mem_pipe[0], F_SETFL, O_NONBLOCK);
     
@@ -446,7 +417,6 @@ void parent_main_loop(void) {
     int has_cpu = 0, has_mem = 0;
     
     while (running) {
-        // Conectar si no está conectado
         if (broker_socket < 0) {
             broker_socket = connect_to_broker();
             if (broker_socket < 0) {
@@ -456,7 +426,6 @@ void parent_main_loop(void) {
             }
         }
         
-        // Leer métricas de los pipes
         ssize_t n = read(cpu_pipe[0], &cpu_metric, sizeof(cpu_metric));
         if (n == sizeof(cpu_metric)) has_cpu = 1;
         
@@ -481,7 +450,7 @@ void parent_main_loop(void) {
             has_mem = 0;
         }
         
-        // Enviar Disk (recolectado directamente)
+        // Enviar Disk
         if (broker_socket >= 0 && !need_reconnect) {
             double disk = get_disk_usage_percent();
             if (send_metric(broker_socket, "disk", disk, "percent") < 0) {
@@ -517,9 +486,7 @@ void parent_main_loop(void) {
     }
 }
 
-// =============================================================================
 // MAIN
-// =============================================================================
 
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);

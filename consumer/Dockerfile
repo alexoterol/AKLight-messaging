@@ -1,4 +1,4 @@
-# AKLight v2 - Consumer Dockerfile
+# AKLight - Consumer Dockerfile
 FROM alpine:3.19
 
 RUN apk add --no-cache \
@@ -9,14 +9,11 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copiar código fuente
 COPY common/aklight_common.h ./common/
 COPY consumer/consumer.c ./
 
-# Compilar
 RUN gcc -O2 -Wall -Wextra -pthread -o consumer consumer.c -lm
 
-# Crear directorio de offsets
 RUN mkdir -p /app/offsets
 
 ENV CONSUMER_ID=consumer1

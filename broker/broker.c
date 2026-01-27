@@ -1,8 +1,4 @@
-/**
- * ============================================================================
- * AKLight v2 - Broker con Particiones y Clúster (CORREGIDO v2)
- * ============================================================================
- */
+/*  Broker con Particiones y Clúster    */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,9 +16,7 @@
 #include <fcntl.h>
 #include <errno.h>
 
-/* ============================================================================
- * CONFIGURACIÓN
- * ============================================================================ */
+/*  CONFIGURACIÓN   */
 
 #define BROKER_PORT         7000
 #define BUFFER_SIZE         4096
@@ -33,9 +27,7 @@
 #define MAX_MESSAGES        1000
 #define MAX_SUBSCRIPTIONS   10
 
-/* ============================================================================
- * ESTRUCTURAS DE DATOS
- * ============================================================================ */
+/*  ESTRUCTURAS DE DATOS    */
 
 typedef struct {
     char topic[256];
@@ -46,7 +38,7 @@ typedef struct {
     int partition;
 } message_t;
 
-/* Partición con mensajes dinámicos */
+/*  Partición con mensajes dinámicos    */
 typedef struct {
     message_t *messages;      /* Array dinámico */
     int count;
@@ -75,9 +67,7 @@ typedef struct {
     pthread_mutex_t send_mutex;
 } client_t;
 
-/* ============================================================================
- * VARIABLES GLOBALES
- * ============================================================================ */
+/*  VARIABLES GLOBALES  */
 
 static client_t clients[MAX_CLIENTS];
 static pthread_mutex_t clients_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -92,9 +82,7 @@ static volatile int running = 1;
 static int broker_id = 1;
 static char data_dir[256];
 
-/* ============================================================================
- * FUNCIONES AUXILIARES
- * ============================================================================ */
+/*  FUNCIONES AUXILIARES    */
 
 static unsigned int djb2_hash(const char *str) {
     unsigned int hash = 5381;
@@ -147,9 +135,7 @@ static int safe_send(client_t *client, const char *msg, size_t len) {
     return (sent > 0) ? 0 : -1;
 }
 
-/* ============================================================================
- * WILDCARD MATCHING
- * ============================================================================ */
+/*  WILDCARD MATCHING    */
 
 static int wildcard_match(const char *pattern, const char *topic) {
     char p_copy[256], t_copy[256];
@@ -177,9 +163,7 @@ static int wildcard_match(const char *pattern, const char *topic) {
     return (t_tok == NULL);
 }
 
-/* ============================================================================
- * GESTIÓN DE TÓPICOS Y PARTICIONES
- * ============================================================================ */
+/*  GESTIÓN DE TÓPICOS Y PARTICIONES    */
 
 static topic_t* find_topic_unlocked(const char *name) {
     for (int i = 0; i < num_topics; i++) {
@@ -320,9 +304,7 @@ static topic_t* get_or_create_topic(const char *name) {
     return t;
 }
 
-/* ============================================================================
- * MANEJADORES DE COMANDOS
- * ============================================================================ */
+/*  MANEJADORES DE COMANDOS */
 
 static void handle_produce(int client_idx, const char *topic_name, 
                           const char *key, const char *payload) {
@@ -472,9 +454,7 @@ static void handle_fetch(int client_idx, const char *topic_pattern, long offset)
     fflush(stdout);
 }
 
-/* ============================================================================
- * MANEJO DE CLIENTES
- * ============================================================================ */
+/*  MANEJO DE CLIENTES  */
 
 static void* handle_client(void *arg) {
     int *args = (int*)arg;
@@ -562,8 +542,11 @@ static void* handle_client(void *arg) {
     }
     
     pthread_mutex_lock(&clients_mutex);
-    printf("[BROKER-%d] 🔌 %s disconnected\n", broker_id, clients[idx].id);
-    fflush(stdout);
+    /* Solo logear si el cliente se había registrado (no healthchecks) */
+    if (clients[idx].id[0] != '\0') {
+        printf("[BROKER-%d] 🔌 %s disconnected\n", broker_id, clients[idx].id);
+        fflush(stdout);
+    }
     clients[idx].active = 0;
     clients[idx].socket = -1;
     pthread_mutex_unlock(&clients_mutex);
@@ -574,9 +557,7 @@ static void* handle_client(void *arg) {
     return NULL;
 }
 
-/* ============================================================================
- * SEÑALES
- * ============================================================================ */
+/*  SEÑALES */
 
 static void signal_handler(int sig) {
     (void)sig;
@@ -585,9 +566,7 @@ static void signal_handler(int sig) {
     running = 0;
 }
 
-/* ============================================================================
- * MAIN
- * ============================================================================ */
+/*  MAIN    */
 
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
@@ -604,7 +583,7 @@ int main(int argc, char *argv[]) {
     
     printf("\n");
     printf("╔═══════════════════════════════════════════╗\n");
-    printf("║       AKLight v2 - Broker %d               ║\n", broker_id);
+    printf("║         AKLight - Broker %d               ║\n", broker_id);
     printf("╠═══════════════════════════════════════════╣\n");
     printf("║  Port: %-35d ║\n", port);
     printf("║  Partitions: %-29d ║\n", NUM_PARTITIONS);

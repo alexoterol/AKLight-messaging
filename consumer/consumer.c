@@ -1,6 +1,4 @@
-// =============================================================================
-// AKLight v2 - Consumer con Thresholds y Alertas (CORREGIDO)
-// =============================================================================
+// AKLight - Consumer con Thresholds y Alertas
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,20 +15,18 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 
-// =============================================================================
 // CONSTANTES
-// =============================================================================
 
 #define MAX_BUFFER 8192
 #define MAX_TOPIC 256
 #define MAX_TOPICS 32
 #define OFFSETS_DIR "/app/offsets"
 #define RECONNECT_DELAY 5
-#define ALERT_COOLDOWN 60
+#define DEFAULT_ALERT_COOLDOWN 300  /* 5 minutos por defecto */
 
-// =============================================================================
+static int alert_cooldown = DEFAULT_ALERT_COOLDOWN;
+
 // ESTRUCTURAS
-// =============================================================================
 
 typedef enum {
     OP_GT, OP_LT, OP_GTE, OP_LTE, OP_EQ
@@ -48,9 +44,7 @@ typedef struct {
     long offset;
 } OffsetEntry;
 
-// =============================================================================
 // VARIABLES GLOBALES
-// =============================================================================
 
 static volatile sig_atomic_t running = 1;
 static int broker_socket = -1;
@@ -72,14 +66,13 @@ static char twilio_account_sid[128] = "";
 static char twilio_auth_token[128] = "";
 static char twilio_from_number[64] = "";
 static char twilio_to_number[64] = "";
-static int twilio_enabled = 0;
+static int twilio_enabled = 1;  
+
 
 static long messages_received = 0;
 static long alerts_triggered = 0;
 
-// =============================================================================
 // SIGNAL HANDLERS
-// =============================================================================
 
 void signal_handler(int sig) {
     (void)sig;
@@ -96,9 +89,7 @@ void setup_signals(void) {
     signal(SIGPIPE, SIG_IGN);
 }
 
-// =============================================================================
 // GESTIÓN DE OFFSETS
-// =============================================================================
 
 char* get_offset_file_path(void) {
     static char path[512];
@@ -200,12 +191,12 @@ void update_offset(const char *topic, long offset) {
     pthread_mutex_unlock(&offset_mutex);
 }
 
-// =============================================================================
 // THRESHOLDS
-// =============================================================================
 
 void init_thresholds(void) {
     char *env;
+    
+    printf("[Consumer] Alert cooldown: %d segundos\n", alert_cooldown);
     
     if ((env = getenv("CPU_THRESHOLD")) != NULL) {
         thresholds[threshold_count].value = atof(env);
@@ -243,7 +234,7 @@ int check_threshold(const char *metric, double value, Threshold **matched) {
             case OP_EQ:  triggered = (value == thresholds[i].value); break;
         }
         
-        if (triggered && (now - thresholds[i].last_alert >= ALERT_COOLDOWN)) {
+        if (triggered && (now - thresholds[i].last_alert >= alert_cooldown)) {
             thresholds[i].last_alert = now;
             *matched = &thresholds[i];
             return 1;
@@ -253,41 +244,24 @@ int check_threshold(const char *metric, double value, Threshold **matched) {
     return 0;
 }
 
-// =============================================================================
-// TWILIO
-// =============================================================================
-
+//  TWILIO
 void init_twilio(void) {
-    char *env;
-    
-    if ((env = getenv("TWILIO_ACCOUNT_SID")) != NULL) 
-        strncpy(twilio_account_sid, env, sizeof(twilio_account_sid) - 1);
-    if ((env = getenv("TWILIO_AUTH_TOKEN")) != NULL) 
-        strncpy(twilio_auth_token, env, sizeof(twilio_auth_token) - 1);
-    if ((env = getenv("TWILIO_FROM_NUMBER")) != NULL) 
-        strncpy(twilio_from_number, env, sizeof(twilio_from_number) - 1);
-    if ((env = getenv("TWILIO_TO_NUMBER")) != NULL) 
-        strncpy(twilio_to_number, env, sizeof(twilio_to_number) - 1);
-    
-    if (strlen(twilio_account_sid) > 0 && strlen(twilio_auth_token) > 0) {
-        twilio_enabled = 1;
-        printf("[Consumer] Twilio WhatsApp HABILITADO\n");
-    } else {
-        printf("[Consumer] Twilio WhatsApp no configurado\n");
-    }
+    printf("[Consumer] ✅ Twilio WhatsApp HABILITADO (hardcoded)\n");
+    printf("[Consumer]    From: %s\n", twilio_from_number);
+    printf("[Consumer]    To: %s\n", twilio_to_number);
     fflush(stdout);
 }
 
 void send_alert(const char *metric, double value, double threshold, const char *producer) {
-    // Banner en consola (igual que antes)
     printf("\n");
     printf("╔══════════════════════════════════════════════════════════════╗\n");
     printf("║  🚨 ALERTA: THRESHOLD EXCEDIDO                               ║\n");
     printf("╠══════════════════════════════════════════════════════════════╣\n");
     printf("║  Métrica: %-50s ║\n", metric);
-    printf("║  Valor actual: %-44.2f ║\n", value);
-    printf("║  Threshold: %-43.2f ║\n", threshold);
+    printf("║  Valor: %-52.2f ║\n", value);
+    printf("║  Threshold: %-48.2f ║\n", threshold);
     printf("║  Producer: %-49s ║\n", producer);
+    printf("║  Cooldown: %-40d segundos ║\n", alert_cooldown);
     printf("╚══════════════════════════════════════════════════════════════╝\n");
     printf("\n");
     fflush(stdout);
@@ -295,36 +269,49 @@ void send_alert(const char *metric, double value, double threshold, const char *
     alerts_triggered++;
     
     if (twilio_enabled) {
-        char mensaje_body[256];
-        snprintf(mensaje_body, sizeof(mensaje_body),
-                 "🚨 *AKLight Alert*\\n\\n"
-                 "Métrica: *%s*\\n"
-                 "Valor: *%.2f* (límite: %.2f)\\n"
-                 "Producer: %s",
-                 metric, value, threshold, producer);
-        
+        char mensaje_body[512];
         char comando[2048];
-        snprintf(comando, sizeof(comando),
-                 "curl -s -X POST 'https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json' "
-                 "-u '%s:%s' "
-                 "--data-urlencode 'From=%s' "
-                 "--data-urlencode 'To=%s' "
-                 "--data-urlencode 'Body=%s' "
-                 "> /dev/null 2>&1 &",
-                 twilio_account_sid, twilio_account_sid, twilio_auth_token,
-                 twilio_from_number, twilio_to_number, mensaje_body);
+        sprintf(mensaje_body,
+                "🚨 *ALERTA AKLIGHT* 🚨\n\n"
+                "El tópico *%s* ha colapsado.\n\n"
+                "📊 *Detalles:*\n"
+                "• Métrica: %s\n"
+                "• Valor actual: *%.2f*\n"
+                "• Threshold: %.2f\n"
+                "• Producer: %s\n"
+                "• Timestamp: %ld\n\n"
+                "⚠️ Requiere atención inmediata.",
+                metric, metric, value, threshold, producer, time(NULL));
+        sprintf(comando,
+                "curl -s -X POST https://api.twilio.com/2010-04-01/Accounts/%s/Messages.json "
+                "--data-urlencode \"From=%s\" "
+                "--data-urlencode \"Body=%s\" "
+                "--data-urlencode \"To=%s\" "
+                "-u %s:%s",
+                twilio_account_sid,
+                twilio_from_number,
+                mensaje_body,
+                twilio_to_number,
+                twilio_account_sid,
+                twilio_auth_token);
         
-        system(comando);
+        printf("[Consumer] 📱 Enviando alerta por WhatsApp...\n");
+        fflush(stdout);
         
-        printf("[Consumer] 📱 Alerta WhatsApp enviada\n");
+        int status = system(comando);
+        
+        if (status == 0) {
+            printf("[Consumer] ✅ Alerta WhatsApp enviada correctamente\n");
+        } else {
+            printf("[Consumer] ⚠️ Error enviando alerta (status=%d)\n", status);
+        }
+        fflush(stdout);
+    } else {
+        printf("[Consumer] ℹ️ Twilio no configurado, alerta solo en consola\n");
         fflush(stdout);
     }
 }
-
-// =============================================================================
 // PROCESAMIENTO DE MENSAJES
-// =============================================================================
-
 void process_message(const char *topic, long offset, int partition, 
                     const char *key, const char *payload) {
     messages_received++;
@@ -335,20 +322,16 @@ void process_message(const char *topic, long offset, int partition,
     printf("           Payload: %.100s%s\n", payload, strlen(payload) > 100 ? "..." : "");
     fflush(stdout);
     
-    // Actualizar offset (offset + 1 para el próximo)
     update_offset(topic, offset + 1);
     
-    // Guardar cada 5 mensajes
     if (session_persistent && messages_received % 5 == 0) {
         save_offsets();
     }
     
-    // Parsear payload para thresholds
     char metric[32] = "";
     double value = 0;
     char producer[64] = "";
     
-    // Extraer "metric":"xxx"
     char *p = strstr(payload, "\"metric\":\"");
     if (p) {
         p += 10;
@@ -359,13 +342,11 @@ void process_message(const char *topic, long offset, int partition,
         }
     }
     
-    // Extraer "value":xxx
     p = strstr(payload, "\"value\":");
     if (p) {
         value = atof(p + 8);
     }
     
-    // Extraer "producer":"xxx"
     p = strstr(payload, "\"producer\":\"");
     if (p) {
         p += 12;
@@ -376,7 +357,6 @@ void process_message(const char *topic, long offset, int partition,
         }
     }
     
-    // Verificar thresholds
     if (metric[0]) {
         Threshold *matched = NULL;
         if (check_threshold(metric, value, &matched)) {
@@ -384,11 +364,7 @@ void process_message(const char *topic, long offset, int partition,
         }
     }
 }
-
-// =============================================================================
 // CONEXIÓN AL BROKER
-// =============================================================================
-
 int connect_to_broker(void) {
     struct hostent *he;
     struct sockaddr_in server_addr;
@@ -422,12 +398,10 @@ int connect_to_broker(void) {
     printf("[Consumer] ✅ Conectado\n");
     fflush(stdout);
     
-    // Registrar
     char msg[MAX_BUFFER];
     snprintf(msg, sizeof(msg), "REGISTER_CONSUMER|%s|%d\n", consumer_id, session_persistent);
     send(sock, msg, strlen(msg), 0);
     
-    // Leer respuesta
     char response[MAX_BUFFER];
     ssize_t n = recv(sock, response, sizeof(response) - 1, 0);
     if (n > 0) {
@@ -436,7 +410,6 @@ int connect_to_broker(void) {
         fflush(stdout);
     }
     
-    // Suscribirse a topics
     for (int i = 0; i < num_topics; i++) {
         snprintf(msg, sizeof(msg), "SUBSCRIBE|%s\n", topics[i]);
         send(sock, msg, strlen(msg), 0);
@@ -448,17 +421,14 @@ int connect_to_broker(void) {
     return sock;
 }
 
-// =============================================================================
 // PARSEAR LÍNEA DE MENSAJE
-// =============================================================================
 
 void parse_message_line(char *line) {
     if (strncmp(line, "MESSAGE|", 8) != 0) return;
     
-    // MESSAGE|topic|offset|partition|key|payload
     char *parts[6] = {NULL};
     int part_count = 0;
-    char *start = line + 8;  // Skip "MESSAGE|"
+    char *start = line + 8;  
     
     for (char *pos = start; *pos && part_count < 5; pos++) {
         if (*pos == '|') {
@@ -467,7 +437,6 @@ void parse_message_line(char *line) {
             start = pos + 1;
         }
     }
-    // El último es el payload (puede contener |)
     if (part_count < 6) {
         parts[part_count++] = start;
     }
@@ -478,9 +447,7 @@ void parse_message_line(char *line) {
     }
 }
 
-// =============================================================================
 // BUCLE PRINCIPAL
-// =============================================================================
 
 void main_loop(void) {
     char buffer[MAX_BUFFER];
@@ -488,7 +455,6 @@ void main_loop(void) {
     int line_pos = 0;
     
     while (running) {
-        // Conectar si es necesario
         if (broker_socket < 0) {
             broker_socket = connect_to_broker();
             if (broker_socket < 0) {
@@ -498,25 +464,21 @@ void main_loop(void) {
             }
         }
         
-        // Configurar socket no bloqueante temporalmente para recibir pushes
         struct timeval tv;
-        tv.tv_sec = 3;  // 3 segundos de timeout
+        tv.tv_sec = 3; 
         tv.tv_usec = 0;
         setsockopt(broker_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
         
-        // Recibir mensajes (push del broker)
         ssize_t n = recv(broker_socket, buffer, sizeof(buffer) - 1, 0);
         
         if (n > 0) {
             buffer[n] = '\0';
             
-            // Procesar byte a byte
             for (ssize_t i = 0; i < n; i++) {
                 if (buffer[i] == '\n') {
                     line_buffer[line_pos] = '\0';
                     
                     if (line_pos > 0) {
-                        // Procesar línea
                         if (strncmp(line_buffer, "MESSAGE|", 8) == 0) {
                             parse_message_line(line_buffer);
                         } else if (strncmp(line_buffer, "SUBSCRIBED|", 11) == 0) {
@@ -543,9 +505,6 @@ void main_loop(void) {
             continue;
             
         } else if (errno == EAGAIN || errno == EWOULDBLOCK || errno == ETIMEDOUT) {
-            // Timeout - no hay mensajes push, intentar FETCH
-            
-            // Enviar FETCH para cada topic
             for (int i = 0; i < num_topics; i++) {
                 long offset = get_offset(topics[i]);
                 char fetch_msg[MAX_BUFFER];
@@ -562,7 +521,6 @@ void main_loop(void) {
             
             if (broker_socket < 0) continue;
             
-            // Leer respuestas del FETCH
             tv.tv_sec = 2;
             setsockopt(broker_socket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
             
@@ -587,7 +545,6 @@ void main_loop(void) {
                 }
             }
             
-            // Heartbeat PING
             if (broker_socket >= 0) {
                 send(broker_socket, "PING\n", 5, MSG_NOSIGNAL);
             }
@@ -600,9 +557,7 @@ void main_loop(void) {
     }
 }
 
-// =============================================================================
 // MAIN
-// =============================================================================
 
 int main(int argc, char *argv[]) {
     setbuf(stdout, NULL);
@@ -618,8 +573,9 @@ int main(int argc, char *argv[]) {
         broker_port = atoi(env);
     if ((env = getenv("SESSION_PERSISTENT")) != NULL)
         session_persistent = atoi(env);
+    if ((env = getenv("ALERT_COOLDOWN")) != NULL)
+        alert_cooldown = atoi(env);
     
-    // Topics separados por coma
     if ((env = getenv("TOPICS")) != NULL) {
         char topics_copy[1024];
         strncpy(topics_copy, env, sizeof(topics_copy) - 1);

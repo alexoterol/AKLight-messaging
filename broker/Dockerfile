@@ -1,4 +1,4 @@
-# AKLight v2 - Broker Dockerfile
+# Broker Dockerfile
 FROM alpine:3.19
 
 RUN apk add --no-cache \
@@ -9,14 +9,11 @@ RUN apk add --no-cache \
 
 WORKDIR /app
 
-# Copiar código fuente
 COPY common/aklight_common.h ./common/
 COPY broker/broker.c ./
 
-# Compilar
 RUN gcc -O2 -Wall -Wextra -pthread -o broker broker.c -lm
 
-# Crear directorio de datos
 RUN mkdir -p /app/data
 
 EXPOSE 7000 7001

@@ -319,10 +319,6 @@ docker-compose logs -f consumer1
 docker-compose logs -f broker1 broker2
 ```
 
-### Ejecutar Stress Test
-```bash
-docker-compose --profile stress up stress1
-```
 
 ### Detener Todo
 ```bash

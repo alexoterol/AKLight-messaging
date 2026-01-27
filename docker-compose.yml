@@ -1,20 +1,13 @@
-# =============================================================================
-# AKLight v2 - Docker Compose (CORREGIDO)
-# =============================================================================
-# 
+# AKLight v2 - Docker Compose
 # Uso:
 #   docker-compose up --build              # Iniciar todo
 #   docker-compose logs -f                 # Ver todos los logs
 #   docker-compose logs -f consumer1       # Ver logs del consumer
 #   docker-compose logs -f producer1       # Ver logs del producer
 #   docker-compose down -v                 # Detener y limpiar
-#
-# =============================================================================
 
 services:
-  # ===========================================================================
   # BROKER 1
-  # ===========================================================================
   broker1:
     build:
       context: .
@@ -37,9 +30,7 @@ services:
       retries: 5
       start_period: 3s
 
-  # ===========================================================================
   # BROKER 2
-  # ===========================================================================
   broker2:
     build:
       context: .
@@ -65,9 +56,7 @@ services:
       retries: 5
       start_period: 3s
 
-  # ===========================================================================
-  # PRODUCER 1 -> conecta a BROKER 1
-  # ===========================================================================
+  # PRODUCER 1
   producer1:
     build:
       context: .
@@ -88,9 +77,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ===========================================================================
-  # PRODUCER 2 -> conecta a BROKER 2
-  # ===========================================================================
+  # PRODUCER 2 
   producer2:
     build:
       context: .
@@ -111,9 +98,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ===========================================================================
   # CONSUMER 1 -> conecta a BROKER 1, recibe de ambos producers via wildcard
-  # ===========================================================================
   consumer1:
     build:
       context: .
@@ -126,10 +111,13 @@ services:
       - BROKER_HOST=broker1
       - BROKER_PORT=7000
       - TOPICS=metrics/docker/#
-      - CPU_THRESHOLD=80.0
-      - MEM_THRESHOLD=500
-      # Twilio (opcional - descomentar y configurar)
-
+      - CPU_THRESHOLD=0.70
+      - MEM_THRESHOLD=10
+      - ALERT_COOLDOWN=300
+      - TWILIO_ACCOUNT_SID=
+      - TWILIO_AUTH_TOKEN=
+      - TWILIO_FROM_NUMBER=
+      - TWILIO_TO_NUMBER=whatsapp:
     volumes:
       - consumer1_offsets:/app/offsets
     networks:
@@ -141,9 +129,7 @@ services:
         condition: service_started
     restart: unless-stopped
 
-  # ===========================================================================
-  # STRESS TEST (perfil opcional)
-  # ===========================================================================
+  # STRESS TEST
   stress1:
     build:
       context: .
@@ -164,18 +150,13 @@ services:
           memory: 512M
           cpus: '0.5'
 
-# =============================================================================
 # VOLUMES
-# =============================================================================
 volumes:
   broker1_data:
   broker2_data:
   consumer1_offsets:
 
-# =============================================================================
 # NETWORKS
-# =============================================================================
 networks:
   aklight_net:
     driver: bridge
-

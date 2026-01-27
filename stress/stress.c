@@ -1,6 +1,4 @@
-// =============================================================================
-// AKLight v2 - Stress Test Program
-// =============================================================================
+// AKLight - Stress Test Program
 // Programa para generar carga de CPU y memoria para probar thresholds
 // 
 // Modos:
@@ -14,7 +12,6 @@
 //   duration:  duración en segundos
 //   intensity: para memory = MB objetivo (default 400)
 //              para cpu = número de iteraciones por ciclo (default 1000000)
-// =============================================================================
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,9 +22,7 @@
 #include <math.h>
 #include <pthread.h>
 
-// =============================================================================
 // CONSTANTES
-// =============================================================================
 
 #define DEFAULT_DURATION 60
 #define DEFAULT_MEMORY_MB 400
@@ -36,9 +31,7 @@
 #define SPIKE_OFF_DURATION 10
 #define ALLOCATION_CHUNK_MB 10
 
-// =============================================================================
 // VARIABLES GLOBALES
-// =============================================================================
 
 static volatile sig_atomic_t running = 1;
 static pthread_mutex_t memory_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -46,9 +39,7 @@ static void **memory_blocks = NULL;
 static int num_blocks = 0;
 static int max_blocks = 0;
 
-// =============================================================================
 // SIGNAL HANDLERS
-// =============================================================================
 
 void signal_handler(int sig) {
     (void)sig;
@@ -64,9 +55,7 @@ void setup_signals(void) {
     sigaction(SIGTERM, &sa, NULL);
 }
 
-// =============================================================================
 // FUNCIONES DE STRESS
-// =============================================================================
 
 // Carga de CPU: cálculos matemáticos intensivos
 void cpu_stress(int iterations) {
@@ -138,9 +127,7 @@ void free_all_memory(void) {
     printf("[Stress] Toda la memoria liberada\n");
 }
 
-// =============================================================================
 // MODOS DE STRESS
-// =============================================================================
 
 void run_cpu_stress(int duration, int iterations) {
     printf("[Stress] Modo CPU - Duración: %d segundos, Iteraciones: %d\n",
@@ -262,9 +249,7 @@ void run_spike_stress(int duration, int target_mb, int cpu_iterations) {
     printf("[Stress] Spike completado - Total spikes: %d\n", spike_count);
 }
 
-// =============================================================================
 // MAIN
-// =============================================================================
 
 void print_usage(const char *prog) {
     printf("Uso: %s <mode> <duration> [intensity]\n", prog);
